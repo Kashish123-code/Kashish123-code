@@ -1,0 +1,82 @@
+# Import necessary libraries
+import numpy as np
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from tensorflow.keras.datasets import cifar10
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input, decode_predictions
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
+from tensorflow.keras.utils import to_categorical
+
+# Load and preprocess the CIFAR-10 dataset
+def load_preprocess_data():
+    (x_train, y_train), (x_test, y_test) = cifar10.load_data()
+
+    # Normalize pixel values to be between -1 and 1
+    x_train = preprocess_input(x_train.astype('float32'))
+    x_test = preprocess_input(x_test.astype('float32'))
+
+    # Convert labels to one-hot encoding
+    y_train = to_categorical(y_train, 10)
+    y_test = to_categorical(y_test, 10)
+
+    return x_train, y_train, x_test, y_test
+
+# Build the model
+def build_model(num_classes):
+    base_model = MobileNetV2(weights='imagenet', include_top=False, input_shape=(32, 32, 3))
+
+    # Add custom layers on top of the MobileNetV2 base
+    x = base_model.output
+    x = GlobalAveragePooling2D()(x)
+    x = Dense(1024, activation='relu')(x)
+    predictions = Dense(num_classes, activation='softmax')(x)
+
+    model = Model(inputs=base_model.input, outputs=predictions)
+
+    # Freeze the base model
+    for layer in base_model.layers:
+        layer.trainable = False
+
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+    return model
+
+# Train the model
+def train_model(model, x_train, y_train, x_test, y_test, epochs=5, batch_size=64):
+    history = model.fit(x_train, y_train,
+                        epochs=epochs,
+                        batch_size=batch_size,
+                        validation_data=(x_test, y_test))
+    return history
+
+# Evaluate and visualize the model
+def evaluate_and_visualize(model, x_test, y_test):
+    # Evaluate the model
+    loss, accuracy = model.evaluate(x_test, y_test, verbose=0)
+    print(f'Test Loss: {loss:.4f}')
+    print(f'Test Accuracy: {accuracy:.4f}')
+
+    # Display some test images with predictions
+    predictions = model.predict(x_test)
+    y_pred_classes = np.argmax(predictions, axis=1)
+    y_true_classes = np.argmax(y_test, axis=1)
+
+    plt.figure(figsize=(10, 10))
+    for i in range(9):
+        plt.subplot(3, 3, i+1)
+        plt.imshow(x_test[i])
+        plt.title(f'Pred: {y_pred_classes[i]}, True: {y_true_classes[i]}')
+        plt.axis('off')
+    plt.show()
+
+# Main function to run the tasks
+def main():
+    x_train, y_train, x_test, y_test = load_preprocess_data()
+    model = build_model(num_classes=10)
+    history = train_model(model, x_train, y_train, x_test, y_test)
+    evaluate_and_visualize(model, x_test, y_test)
+
+if __name__ == "__main__":
+    main()
